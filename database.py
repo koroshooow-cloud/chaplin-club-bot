@@ -117,3 +117,18 @@ def is_table_reserved(session_number, table_number):
     conn.close()
 
     return count > 0
+def has_active_reservation(user_id):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+    SELECT COUNT(*)
+    FROM reservations
+    WHERE user_id = ?
+    """, (user_id,))
+
+    count = cur.fetchone()[0]
+
+    conn.close()
+
+    return count > 0
