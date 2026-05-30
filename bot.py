@@ -1,6 +1,12 @@
 import os
 from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -10,8 +16,9 @@ MAIN_MENU = [
     ["🍽 رزرو میز"],
     ["📋 رزروهای من"],
     ["❌ لغو رزرو"],
-    ["☎️ تماس با ما"]
+    ["☎️ تماس با ما"],
 ]
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup(
@@ -24,6 +31,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
@@ -34,7 +42,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "🍽 رزرو میز":
         await update.message.reply_text(
-            "سیستم رزرو در مرحله بعدی فعال خواهد شد."
+            "سیستم رزرو به زودی فعال می‌شود."
         )
 
     elif text == "📋 رزروهای من":
@@ -47,15 +55,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "فعلاً رزروی برای لغو وجود ندارد."
         )
 
-async def main():
+
+if __name__ == "__main__":
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_message
+        )
+    )
 
     print("Chaplin Club Bot Running...")
-    await app.run_polling()
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    app.run_polling()
