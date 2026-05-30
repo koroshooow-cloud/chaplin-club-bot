@@ -1,66 +1,164 @@
 import os
 import asyncio
-from telegram import ReplyKeyboardMarkup, Update
+
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    ConversationHandler,
     ContextTypes,
     filters,
 )
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from config import (
+    ADMIN_ID,
+    PHONE_NUMBER,
+    ADDRESS,
+)
 
-MAIN_MENU = [
-    ["🍽 رزرو میز"],
-    ["📋 رزروهای من"],
-    ["❌ لغو رزرو"],
-    ["☎️ تماس با ما"],
-]
+from states import (
+    SELECT_SESSION,
+    SELECT_GUESTS,
+    SELECT_TABLE,
+    ENTER_NAME,
+    ENTER_PHONE,
+)
+
+from keyboards import (
+    main_keyboard,
+    session_keyboard,
+)
+
+from database import (
+    init_db,
+    create_reservation,
+    get_user_reservations,
+    has_active_reservation,
+)
+
+from reservation import (
+    get_available_tables,
+)
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-
     await update.message.reply_text(
         "به ربات رزرو Chaplin Club خوش آمدید 🌹",
-        reply_markup=keyboard,
+        reply_markup=main_keyboard()
     )
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def reserve_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    user_id = update.effective_user.id
+
+    if has_active_reservation(user_id):
+        await update.message.reply_text(
+            "شما یک رزرو فعال دارید.\nابتدا رزرو قبلی را لغو کنید."
+        )
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "سانس موردنظر را انتخاب کنید:",
+        reply_markup=session_keyboard()
+    )
+
+    return SELECT_SESSION
+
+
+async def select_session(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     text = update.message.text
 
-    if text == "☎️ تماس با ما":
+    if text == "سانس 1":
+        context.user_data["session"] = 1
+
+    elif text == "سانس 2":
+        context.user_data["session"] = 2
+
+    else:
         await update.message.reply_text(
-            "📞 09030000440\n\n📍 کیش، دیپلمات تجاری، رستوران چاپلین"
+            "لطفاً یکی از سانس‌ها را انتخاب کنید."
         )
+        return SELECT_SESSION
 
-    elif text == "🍽 رزرو میز":
-        await update.message.reply_text("سیستم رزرو در حال آماده‌سازی است.")
+    await update.message.reply_text(
+        "تعداد نفرات را وارد کنید:"
+    )
 
-    elif text == "📋 رزروهای من":
-        await update.message.reply_text("فعلاً رزروی ثبت نشده است.")
-
-    elif text == "❌ لغو رزرو":
-        await update.message.reply_text("فعلاً رزروی برای لغو وجود ندارد.")
+    return SELECT_GUESTS
 
 
-async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+async def select_guests(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    try:
+        guests = int(update.message.text)
+    except:
+        await update.message.reply_text(
+            "لطفاً فقط عدد وارد کنید."
+        )
+        return SELECT_GUESTS
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    if guests < 1:
+        await update.message.reply_text(
+            "تعداد نفرات نامعتبر است."
+        )
+        return SELECT_GUESTS
 
-    print("Chaplin Club Bot Running...")
+    if guests > 4:
+        await update.message.reply_text(
+            f"برای رزرو بالای ۴ نفر لطفاً با {PHONE_NUMBER} تماس بگیرید."
+        )
+        return ConversationHandler.END
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
+    context.user_data["guests"] = guests
 
-    while True:
-        await asyncio.sleep(3600)
+    available_tables = get_available_tables(
+        context.user_data["session"],
+        guests
+    )
 
+    if not available_tables:
+        await update.message.reply_text(
+            "میز خالی برای این سانس موجود نیست."
+        )
+        return ConversationHandler.END
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    context.user_data["available_tables"] = available_tables
+
+    keyboard = []
+
+    row = []
+
+    for table_number in available_tables:
+        row.append(str(table_number))
+
+        if len(row) == 4:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    await update.message.reply_text(
+        "شماره میز را انتخاب کنید:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
+    )
+
+    return SELECT_TABLE
